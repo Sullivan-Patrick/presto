@@ -17,21 +17,28 @@ import com.facebook.presto.Session;
 import com.facebook.presto.common.QualifiedObjectName;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.sql.tree.DefaultTraversalVisitor;
+import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.Table;
+import com.facebook.presto.sql.tree.With;
+import com.facebook.presto.sql.tree.WithQuery;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.facebook.presto.metadata.MetadataUtil.createQualifiedObjectName;
 import static java.util.Objects.requireNonNull;
 
 public class MaterializedViewCandidateExtractor
-        extends DefaultTraversalVisitor<Void, Void>
+        extends DefaultTraversalVisitor<Void, Boolean>
 {
     private final Set<QualifiedObjectName> tableNames = new HashSet<>();
     private final Metadata metadata;
     private final Session session;
+
+    Set<QualifiedObjectName> withTables = new HashSet<>();
 
     public MaterializedViewCandidateExtractor(Session session, Metadata metadata)
     {
@@ -40,31 +47,28 @@ public class MaterializedViewCandidateExtractor
     }
 
     @Override
-    protected Void visitTable(Table node, Void context)
+    protected Void visitWithQuery(WithQuery node, Boolean context)
+    {
+        withTables.add(createQualifiedObjectName(session, node, QualifiedName.of(node.getName().toString())));
+        return super.visitWithQuery(node, context);
+    }
+
+    @Override
+    protected Void visitTable(Table node, Boolean context)
     {
         tableNames.add(createQualifiedObjectName(session, node, node.getName()));
         return null;
     }
 
-    public Set<QualifiedObjectName> getMaterializedViewCandidates()
+    public Map<QualifiedObjectName, List<QualifiedObjectName>> getMaterializedViewCandidatesForTable()
     {
-        Set<QualifiedObjectName> materializedViewCandidates = new HashSet<>();
+        Map<QualifiedObjectName, List<QualifiedObjectName>> baseTableToMaterializedViews = new HashMap<>();
+
+        tableNames.removeAll(withTables);
 
         for (QualifiedObjectName baseTable : tableNames) {
-            List<QualifiedObjectName> materializedViews = metadata.getReferencedMaterializedViews(session, baseTable);
-
-            if (materializedViewCandidates.isEmpty()) {
-                materializedViewCandidates.addAll(materializedViews);
-            }
-            else {
-                materializedViewCandidates.retainAll(materializedViews);
-            }
-
-            if (materializedViewCandidates.isEmpty()) {
-                return materializedViewCandidates;
-            }
+            baseTableToMaterializedViews.put(baseTable, metadata.getReferencedMaterializedViews(session, baseTable));
         }
-
-        return materializedViewCandidates;
+        return baseTableToMaterializedViews;
     }
 }
