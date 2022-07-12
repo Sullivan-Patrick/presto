@@ -277,7 +277,8 @@ public class TestMaterializedViewQueryOptimizer
     @Test
     public void testIdentifiersInDifferentNodes()
     {
-        String originalViewSql = format("SELECT a, b, c, d, e FROM %s", BASE_TABLE_1);
+        //fails due to filter condition
+        String originalViewSql = format("SELECT a, b, c, d, e FROM %s WHERE a > 5 OR IF(b > 4, c, 2) = e AND d IN (1, 2, 3) AND NOT (a IS NULL)", BASE_TABLE_1);
         String baseQuerySql = format("SELECT a, c, e FROM %s WHERE a > 5 OR IF(b > 4, c, 2) = e AND d IN (1, 2, 3) AND NOT (a IS NULL)", BASE_TABLE_1);
         String expectedRewrittenSql = format("SELECT a, c, e FROM %s WHERE a > 5 OR IF(b > 4, c, 2) = e AND d IN (1, 2, 3) AND NOT (a IS NULL)", VIEW_1);
         assertOptimizedQuery(baseQuerySql, expectedRewrittenSql, originalViewSql, BASE_TABLE_1, VIEW_1);
